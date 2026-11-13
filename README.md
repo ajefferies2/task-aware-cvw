@@ -37,7 +37,9 @@ architectural regression has not been run for these changes. The original small
 Wally configuration has prediction disabled; the measured baseline explicitly
 enables shared prediction to isolate task awareness.
 
-The upstream Wally documentation and licensing follow below.
+The upstream CI workflows are omitted from this experiment fork. Run `make test`
+locally for the experiment checks. The upstream Wally documentation and
+licensing follow below.
 
 ---
 
