@@ -1,0 +1,36 @@
+RESET: all counters = 01
+COUNTER mode=partitioned task=0 outcome=T  state=01 -> 10
+COUNTER mode=partitioned task=0 outcome=T  state=10 -> 11
+COUNTER mode=partitioned task=0 outcome=T  state=11 -> 11
+COUNTER mode=partitioned task=0 outcome=T  state=11 -> 11
+COUNTER mode=partitioned task=0 outcome=T  state=11 -> 11
+COUNTER mode=partitioned task=1 outcome=NT state=01 -> 00
+COUNTER mode=partitioned task=1 outcome=NT state=00 -> 00
+COUNTER mode=partitioned task=1 outcome=NT state=00 -> 00
+COUNTER mode=partitioned task=1 outcome=NT state=00 -> 00
+COUNTER mode=partitioned task=1 outcome=NT state=00 -> 00
+RESET: all counters = 01
+COUNTER mode=shared      task=0 outcome=T  state=01 -> 10
+COUNTER mode=shared      task=0 outcome=T  state=10 -> 11
+COUNTER mode=shared      task=0 outcome=T  state=11 -> 11
+COUNTER mode=shared      task=1 outcome=NT state=11 -> 10
+COUNTER mode=shared      task=1 outcome=NT state=10 -> 01
+COUNTER mode=shared      task=1 outcome=NT state=01 -> 00
+RESET: all counters = 01
+COUNTER mode=shared      task=0 outcome=T  state=01 -> 10
+RESET: all counters = 01
+COUNTER mode=partitioned task=0 outcome=T  state=01 -> 10
+COUNTER mode=partitioned task=0 outcome=T  state=10 -> 11
+COUNTER mode=partitioned task=0 outcome=T  state=11 -> 11
+COUNTER mode=partitioned task=1 outcome=NT state=01 -> 00
+COUNTER mode=partitioned task=1 outcome=NT state=00 -> 00
+COUNTER mode=partitioned task=1 outcome=NT state=00 -> 00
+RESET: all counters = 01
+RESET: all counters = 01
+RESET: all counters = 01
+RESET: all counters = 01
+PASS: tasks=2 predictor reset, saturation, equal capacity, interference, banks, ownership, aliasing, stall, flush; CSR validation/forwarding
+- /home/atj/class/cpe5300/cvw/experiments/task_bpred/tests/tb_task_predictor.sv:148: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.052 2026-09-05
+- Verilator: $finish at 5us; walltime 0.001 s; speed 5.812 ms/s
+- Verilator: cpu 0.001 s on 1 threads; allocated 4 MB

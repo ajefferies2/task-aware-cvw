@@ -1,0 +1,7 @@
+/build/
+/sw/build/
+/results/*.log
+/results/.matplotlib/
+__pycache__/
+*.vcd
+*.fst

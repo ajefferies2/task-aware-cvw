@@ -1,0 +1,29 @@
+{
+  "tasks": 2,
+  "ram_bytes": 65536,
+  "banks": 2,
+  "entries_per_task": 128,
+  "iterations": 2048,
+  "quanta": [
+    1,
+    4,
+    16,
+    64,
+    256
+  ],
+  "workloads": [
+    0,
+    1,
+    2,
+    3
+  ],
+  "repeat": 1,
+  "window": 32,
+  "maxcycles": 10000000,
+  "sha256": {
+    "build/tasks-2/obj_dir/Vtask_bpred_tb": "3a1ef69fa871d350c169701c99e0925b072edd179f7bbad6d4b3434f66db6e2a",
+    "sw/build/tasks-2/workloads.mem": "7ea119d8efa722010ef962d63bdc3b9e9a998ca6c5a64a53a3c00414aa6de3ab",
+    "sw/build/tasks-2/workloads.nm": "50f0639683f01f538e784dbf30feae4e9d1aaf1296dfd2a64f450ddc2ca1b2f7"
+  },
+  "verilator": "Verilator 5.052 2026-09-05 rev v5.052"
+}
