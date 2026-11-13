@@ -1,3 +1,46 @@
+# Task-aware branch prediction on Wally
+
+CPE5300 project by Alex Jefferies and Alec Saldana. This repository extends
+[CORE-V Wally](https://github.com/openhwfoundation/cvw) with a task-indexed
+two-bit direction predictor and a reproducible Verilator experiment.
+
+- [Implementation and how to run](experiments/task_bpred/README.md)
+- [Measured results](experiments/task_bpred/results/report.md)
+- [Comparison plots](experiments/task_bpred/results/comparison.png)
+- [Raw CSV](experiments/task_bpred/results/results.csv)
+
+Two cooperative tasks run four controlled workloads. The baseline shares 256
+two-bit counters; the task-aware mode partitions the same table into two banks
+of 128 counters. A custom CSR supplies task identity. Both modes run identical
+software and share the same branch-target buffer and return-address stack.
+
+At a 16-iteration quantum, the opposing-task shared-code workload improves from
+87.52% to 99.98% hot-branch accuracy and uses 1.02% fewer cycles. Structured
+patterns can regress, and pseudorandom branches show no meaningful improvement.
+These are controlled RTL measurements, not general application speedup claims.
+
+```sh
+cd experiments/task_bpred
+make test CROSS_COMPILE=riscv64-unknown-elf-
+python3 run_experiments.py
+```
+
+Requires Verilator, a host C++ compiler, Make, Python, and a RISC-V GCC/binutils
+toolchain supporting RV32IM. Matplotlib generates the plots; `--no-plot` skips
+that dependency. The default compiler prefix uses a locally installed Zephyr
+SDK; use `CROSS_COMPILE` to select your installation. No upstream submodules are
+required for this standalone experiment.
+
+The experiment uses a cooperative scheduler and has not been deployed to an
+FPGA. Directed tests and 40 comparison runs pass; the complete upstream
+architectural regression has not been run for these changes. The original small
+Wally configuration has prediction disabled; the measured baseline explicitly
+enables shared prediction to isolate task awareness.
+
+The upstream Wally documentation and licensing follow below.
+
+---
+
 [![Installation CI](https://github.com/openhwfoundation/cvw/actions/workflows/install.yml/badge.svg?branch=main)](https://github.com/openhwfoundation/cvw/actions/workflows/install.yml)
 
 # core-v-wally

@@ -32,6 +32,7 @@
 // and limitations under the License.
 ////////////////////////////////////////////////////////////////////////////////////////////////
 
+`include "BranchPredictorType.vh"
 module csrm  import cvw::*;  #(parameter cvw_t P) (
   input  logic                     clk, reset,
   input  logic                     UngatedCSRMWriteM, CSRMWriteM, MTrapM,
@@ -51,6 +52,7 @@ module csrm  import cvw::*;  #(parameter cvw_t P) (
   /* verilator lint_on UNDRIVEN */
   output logic                     WriteMSTATUSM, WriteMSTATUSHM,
   output logic                     IllegalCSRMAccessM, IllegalCSRMWriteReadonlyM,
+  output logic [1:0]               BPContextF, // {partition mode, task ID}, forwarded for refetch
   output logic [63:0]              MENVCFG_REGW
 );
 
@@ -62,6 +64,23 @@ module csrm  import cvw::*;  #(parameter cvw_t P) (
   logic                            WriteMTVECM, WriteMEDELEGM, WriteMIDELEGM;
   logic                            WriteMSCRATCHM, WriteMEPCM, WriteMCAUSEM, WriteMTVALM;
   logic                            WriteMCOUNTERENM, WriteMCOUNTINHIBITM;
+
+  // Custom machine CSR, present only with the task-aware predictor.
+  localparam MBPCTX = 12'hBC0;
+  logic [1:0] BPContextW;
+  logic WriteBPContextM;
+  if (P.BPRED_SUPPORTED && P.BPRED_TYPE == `BP_TASK_TWOBIT) begin : bpcontext
+    assign WriteBPContextM = CSRMWriteM & (CSRAdrM == MBPCTX);
+    flopenr #(2) contextreg(clk, reset, WriteBPContextM,
+                           {CSRWriteValM[8], CSRWriteValM[0]}, BPContextW);
+    // CSR writes flush younger instructions. The predictor reads PCNextF on
+    // the same edge as the CSR commits, so forward the new context to lookup.
+    assign BPContextF = WriteBPContextM ? {CSRWriteValM[8], CSRWriteValM[0]} : BPContextW;
+  end else begin : nobpcontext
+    assign BPContextW = '0;
+    assign BPContextF = '0;
+    assign WriteBPContextM = 1'b0;
+  end
 
   // Machine CSRs
   localparam MVENDORID     = 12'hF11;
@@ -269,6 +288,9 @@ module csrm  import cvw::*;  #(parameter cvw_t P) (
       MIDELEG:       CSRMReadValM = {{(P.XLEN-12){1'b0}}, MIDELEG_REGW};
       MIP:           CSRMReadValM = {{(P.XLEN-12){1'b0}}, MIP_REGW};
       MIE:           CSRMReadValM = {{(P.XLEN-12){1'b0}}, MIE_REGW};
+      MBPCTX:        if (P.BPRED_SUPPORTED && P.BPRED_TYPE == `BP_TASK_TWOBIT)
+                       CSRMReadValM = {{(P.XLEN-9){1'b0}}, BPContextW[1], 7'b0, BPContextW[0]};
+                     else IllegalCSRMAccessM = 1'b1;
       MSCRATCH:      CSRMReadValM = MSCRATCH_REGW;
       MEPC:          CSRMReadValM = MEPC_REGW;
       MCAUSE:        CSRMReadValM = MCAUSE_REGW;

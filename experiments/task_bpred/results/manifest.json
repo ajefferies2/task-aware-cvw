@@ -1,0 +1,24 @@
+{
+  "iterations": 2048,
+  "quanta": [
+    1,
+    4,
+    16,
+    64,
+    256
+  ],
+  "workloads": [
+    0,
+    1,
+    2,
+    3
+  ],
+  "repeat": 1,
+  "window": 32,
+  "sha256": {
+    "build/obj_dir/Vtask_bpred_tb": "41c33a0fcf10f6226aacc213dfd0d4f59bc430c770bae83302223bfab17213cc",
+    "sw/build/workloads.mem": "b5005b66bac673f5516fa1460713e006596ebed212872f246d5c7d491089e01a",
+    "sw/build/workloads.nm": "f16475ca60a383138c7b8ad9409b74869d630008863b4fd4501cb31864f5b208"
+  },
+  "verilator": "Verilator 5.052 2026-09-05 rev v5.052"
+}

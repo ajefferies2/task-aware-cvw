@@ -33,6 +33,7 @@ module ifu import cvw::*;  #(parameter cvw_t P) (
   output logic                 IFUStallF,                                // IFU stalsl pipeline during a multicycle operation
   // Command from CPU
   input  logic                 InvalidateICacheM,                        // Clears all instruction cache valid bits
+  input  logic [1:0]           BPContextF,                               // effective predictor context for next fetch
   input  logic                 CSRWriteFenceM,                           // CSR write or fence instruction, PCNextF = the next valid PC (typically PCE)
   input  logic                 InstrValidD, InstrValidE,
   input  logic                 BranchD, BranchE,
@@ -386,7 +387,7 @@ module ifu import cvw::*;  #(parameter cvw_t P) (
   // Branch and Jump Predictor
   ////////////////////////////////////////////////////////////////////////////////////////////////
   if (P.BPRED_SUPPORTED) begin : bpred
-    bpred #(P) bpred(.clk, .reset,
+    bpred #(P) bpred(.clk, .reset, .BPContextF,
                 .StallF, .StallD, .StallE, .StallM, .StallW,
                 .FlushD, .FlushE, .FlushM, .FlushW, .InstrValidD, .InstrValidE,
                 .BranchD, .BranchE, .JumpD, .JumpE,

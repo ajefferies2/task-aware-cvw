@@ -35,6 +35,7 @@ module bpred import cvw::*;  #(parameter cvw_t P) (
   input  logic             clk, reset,
   input  logic             StallF, StallD, StallE, StallM, StallW,
   input  logic             FlushD, FlushE, FlushM, FlushW,
+  input  logic [1:0]       BPContextF,                // {partition mode, task ID}
   // Fetch stage
   // the prediction
   input  logic [31:0]      InstrD,                    // Decompressed decode stage instruction. Used to decode instruction class
@@ -94,7 +95,12 @@ module bpred import cvw::*;  #(parameter cvw_t P) (
   logic                    PCSrcM;
 
   // Part 1 branch direction prediction
-  if (P.BPRED_TYPE == `BP_TWOBIT) begin : Predictor
+  if (P.BPRED_TYPE == `BP_TASK_TWOBIT) begin : Predictor
+    taskTwoBitPredictor #(P.XLEN, P.BPRED_SIZE) DirPredictor(.clk, .reset,
+      .StallF, .StallD, .StallE, .StallM, .StallW, .FlushD, .FlushE, .FlushM, .FlushW,
+      .PCNextF, .BPContextF, .BPDirF, .BPDirWrongE, .BranchE, .BranchM, .PCSrcE);
+
+  end else if (P.BPRED_TYPE == `BP_TWOBIT) begin : Predictor
     twoBitPredictor #(P, P.XLEN, P.BPRED_SIZE) DirPredictor(.clk, .reset, .StallF, .StallD, .StallE, .StallM, .StallW,
       .FlushD, .FlushE, .FlushM, .FlushW,
       .PCNextF, .PCM, .BPDirF, .BPDirWrongE,
