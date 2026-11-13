@@ -10,4 +10,4 @@ verilator --binary --timing --assert -Wno-fatal --top-module tb_task_predictor \
   "$repo_dir/src/generic/flop/flopenrc.sv" \
   "$repo_dir/src/ifu/bpred/taskTwoBitPredictor.sv" \
   "$test_dir/tb_task_predictor.sv" > "$build_dir/build.log" 2>&1
-"$build_dir/Vtb_task_predictor"
+"$build_dir/Vtb_task_predictor" "$@"

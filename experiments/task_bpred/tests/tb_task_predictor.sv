@@ -18,18 +18,25 @@ module tb_task_predictor;
     {StallF, StallD, StallE, StallM, StallW} = '0;
     {FlushD, FlushE, FlushM, FlushW} = '0;
     tick(); reset = 0;
+    if ($test$plusargs("show_counters")) $display("RESET: all counters = 01");
   endtask
   task automatic lookup(input logic [1:0] ctx, input logic [31:0] pc);
     BPContextF = ctx; PCNextF = pc; tick();
   endtask
   task automatic train(input logic [1:0] ctx, input logic taken);
+    logic [1:0] before_state;
     lookup(ctx, 32'h80000000);
+    before_state = BPDirF;
     tick(); tick(); // F -> D -> E
     BranchE = 1; PCSrcE = taken;
     tick(); // E -> M
     BranchE = 0; BranchM = 1;
     tick(); // M update
     BranchM = 0;
+    if ($test$plusargs("show_counters"))
+      $display("COUNTER mode=%s task=%0d outcome=%s state=%02b -> %02b",
+               ctx[1] ? "partitioned" : "shared     ", ctx[0],
+               taken ? "T " : "NT", before_state, BPDirF);
   endtask
   task automatic check_counter(input logic [1:0] expected, input string label_text);
     if (BPDirF !== expected)

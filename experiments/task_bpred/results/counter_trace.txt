@@ -1,0 +1,25 @@
+RESET: all counters = 01
+COUNTER mode=partitioned task=0 outcome=T  state=01 -> 10
+COUNTER mode=partitioned task=0 outcome=T  state=10 -> 11
+COUNTER mode=partitioned task=0 outcome=T  state=11 -> 11
+COUNTER mode=partitioned task=0 outcome=T  state=11 -> 11
+COUNTER mode=partitioned task=0 outcome=T  state=11 -> 11
+COUNTER mode=partitioned task=1 outcome=NT state=01 -> 00
+COUNTER mode=partitioned task=1 outcome=NT state=00 -> 00
+COUNTER mode=partitioned task=1 outcome=NT state=00 -> 00
+COUNTER mode=partitioned task=1 outcome=NT state=00 -> 00
+COUNTER mode=partitioned task=1 outcome=NT state=00 -> 00
+RESET: all counters = 01
+COUNTER mode=shared      task=0 outcome=T  state=01 -> 10
+COUNTER mode=shared      task=0 outcome=T  state=10 -> 11
+COUNTER mode=shared      task=0 outcome=T  state=11 -> 11
+COUNTER mode=shared      task=1 outcome=NT state=11 -> 10
+COUNTER mode=shared      task=1 outcome=NT state=10 -> 01
+COUNTER mode=shared      task=1 outcome=NT state=01 -> 00
+RESET: all counters = 01
+COUNTER mode=shared      task=0 outcome=T  state=01 -> 10
+RESET: all counters = 01
+RESET: all counters = 01
+RESET: all counters = 01
+RESET: all counters = 01
+PASS: task predictor reset, saturation, equal capacity, interference, ownership, aliasing, stall, flush
