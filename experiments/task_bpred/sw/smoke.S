@@ -64,7 +64,7 @@ isa_smoke:
   /* Adjacent CSR accesses and the first conditional branch after each write. */
   li a0, 0x46
   li t4, 0
-  li t5, TASK_COUNT
+  li t5, CONTEXT_COUNT
   li t6, 0
 5:
   or t0, t4, t6
@@ -82,27 +82,27 @@ isa_smoke:
   li t0, -1
   csrw 0xbc0, t0
   csrr t1, 0xbc0
-#if TASK_COUNT == 256
+#if CONTEXT_COUNT == 256
   li t0, 0x1ff
 #else
   li t0, 0x100
 #endif
   bne t0, t1, 9f
-#if TASK_COUNT < 256
-  li t0, TASK_COUNT
+#if CONTEXT_COUNT < 256
+  li t0, CONTEXT_COUNT
   csrw 0xbc0, t0
   csrr t1, 0xbc0
   bnez t1, 9f
-  li t0, (0x100 | TASK_COUNT)
+  li t0, (0x100 | CONTEXT_COUNT)
   csrw 0xbc0, t0
   csrr t1, 0xbc0
   li t0, 0x100
   bne t0, t1, 9f
 #endif
-  li t0, (0xfffffe00 | (TASK_COUNT - 1))
+  li t0, (0xfffffe00 | (CONTEXT_COUNT - 1))
   csrw 0xbc0, t0
   csrr t1, 0xbc0
-  li t0, (TASK_COUNT - 1)
+  li t0, (CONTEXT_COUNT - 1)
   bne t0, t1, 9f
   csrw 0xbc0, zero
   li a0, 0x47

@@ -70,7 +70,7 @@ module csrm  import cvw::*;  #(parameter cvw_t P) (
   logic [P.BPRED_TASK_BITS:0] BPContextW;
   logic WriteBPContextM;
   logic [P.BPRED_TASK_BITS-1:0] BPTaskWriteM;
-  if (P.BPRED_SUPPORTED && P.BPRED_TYPE == `BP_TASK_TWOBIT) begin : bpcontext
+  if (P.BPRED_SUPPORTED && `BP_TASK_AWARE(P.BPRED_TYPE)) begin : bpcontext
     assign WriteBPContextM = CSRMWriteM & (CSRAdrM == MBPCTX);
     // All eight software-visible task bits participate in validation. An
     // out-of-range ID maps to task zero rather than aliasing after truncation.
@@ -294,7 +294,7 @@ module csrm  import cvw::*;  #(parameter cvw_t P) (
       MIDELEG:       CSRMReadValM = {{(P.XLEN-12){1'b0}}, MIDELEG_REGW};
       MIP:           CSRMReadValM = {{(P.XLEN-12){1'b0}}, MIP_REGW};
       MIE:           CSRMReadValM = {{(P.XLEN-12){1'b0}}, MIE_REGW};
-      MBPCTX:        if (P.BPRED_SUPPORTED && P.BPRED_TYPE == `BP_TASK_TWOBIT)
+      MBPCTX:        if (P.BPRED_SUPPORTED && `BP_TASK_AWARE(P.BPRED_TYPE))
                        CSRMReadValM = {{(P.XLEN-9){1'b0}}, BPContextW[P.BPRED_TASK_BITS],
                                       8'(BPContextW[P.BPRED_TASK_BITS-1:0])};
                      else IllegalCSRMAccessM = 1'b1;

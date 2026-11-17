@@ -222,7 +222,11 @@ localparam PLIC_PWM_ID = 32'd11; // base of a contiguous block of 4, one per PWM
 
 // Branch prediction
 localparam logic BPRED_SUPPORTED = 1;
-localparam BPRED_TYPE = `BP_TASK_TWOBIT; // BP_GSHARE_BASIC, BP_GLOBAL, BP_GLOBAL_BASIC, BP_TWOBIT
+// The predictor is chosen per build (Makefile PREDICTOR).
+`ifndef TASK_BPRED_TYPE
+  `define TASK_BPRED_TYPE `BP_TASK_TWOBIT
+`endif
+localparam BPRED_TYPE = `TASK_BPRED_TYPE; // BP_TASK_TWOBIT or BP_TASK_GSHARE
 localparam BPRED_SIZE = 32'd8;
 localparam BPRED_NUM_LHR = 32'd6;
 // Keep Wally's default 1024-entry target buffer identical in both modes.

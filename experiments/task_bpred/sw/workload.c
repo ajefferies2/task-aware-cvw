@@ -1,6 +1,7 @@
 #include "platform.h"
 
 extern void context_switch(u32 **old_sp, u32 *new_sp);
+extern void run_preemptive(u32 mode, u32 repetitions);
 extern u32 hot_shared(u32 condition, u32 sum);
 extern unsigned char hot_task_base[];
 extern unsigned char hot_task_stride[];
@@ -79,15 +80,20 @@ int main(void) {
   workload = ARG_WORKLOAD;
   iterations = ARG_ITERATIONS;
   if (mode > 1 || quantum == 0 || quantum > 1048576u ||
-      workload > 3 || iterations == 0 || iterations > 1048576u)
+      workload > 4 || iterations == 0 || iterations > 1048576u)
     fail(0x10);
+  if (workload == 4) {               /* preemptive Embench tasks; see preempt.c */
+    run_preemptive(mode, iterations);
+    STATUS = 1;
+    for (;;) __asm__ volatile ("nop");
+  }
   for (u32 id = 0; id < TASK_COUNT; ++id) {
     u32 *frame = &stacks[id][1024 - 16];
     frame[0] = (u32)(uptr)task_entry;
     tasks[id].sp = frame;
   }
   u32 switches = 0;
-  set_context(mode << 8);
+  set_context((mode << 8) | KERNEL_ID);
   u32 start_cycle = cycle();
   u32 start_instret = instret();
   MEASURE = 1;
@@ -99,6 +105,7 @@ int main(void) {
         set_context((mode << 8) | id);
         ++switches;
         context_switch(&scheduler_sp, tasks[id].sp);
+        set_context((mode << 8) | KERNEL_ID);
         finished += tasks[id].done;
       }
     }

@@ -7,3 +7,5 @@
 `define BP_LOCAL_AHEAD  (32'd6)
 `define BP_LOCAL_REPAIR (32'd7)
 `define BP_TASK_TWOBIT  (32'd8)
+`define BP_TASK_GSHARE  (32'd9)  // gshare with a global history per task
+`define BP_TASK_AWARE(t) ((t) == `BP_TASK_TWOBIT || (t) == `BP_TASK_GSHARE)

@@ -1,6 +1,8 @@
 /build/
 /sw/build/
-/results/*.log
+/results/*/*.log
+/results/*/results.json
+/results/*/manifest.json
 /results/.matplotlib/
 __pycache__/
 *.vcd

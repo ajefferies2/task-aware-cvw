@@ -100,6 +100,12 @@ module bpred import cvw::*;  #(parameter cvw_t P) (
       .StallF, .StallD, .StallE, .StallM, .StallW, .FlushD, .FlushE, .FlushM, .FlushW,
       .PCNextF, .BPContextF, .BPDirF, .BPDirWrongE, .BranchE, .BranchM, .PCSrcE);
 
+  end else if (P.BPRED_TYPE == `BP_TASK_GSHARE) begin : Predictor
+    taskGshare #(P, P.XLEN, P.BPRED_SIZE, P.BPRED_TASKS) DirPredictor(
+      .clk, .reset, .StallF, .StallD, .StallE, .StallM, .StallW, .FlushD, .FlushE, .FlushM, .FlushW,
+      .BPContextF, .PCNextF, .PCF, .PCD, .PCE, .PCM, .BPDirF, .BPDirWrongE,
+      .BPBranchF, .BranchD, .BranchE, .BranchM, .BranchW, .PCSrcE);
+
   end else if (P.BPRED_TYPE == `BP_TWOBIT) begin : Predictor
     twoBitPredictor #(P, P.XLEN, P.BPRED_SIZE) DirPredictor(.clk, .reset, .StallF, .StallD, .StallE, .StallM, .StallW,
       .FlushD, .FlushE, .FlushM, .FlushW,

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run matched shared/partitioned Wally experiments and save reproducible results."""
+"""Run matched shared/task-aware Wally experiments and save reproducible results."""
 import argparse
 import csv
 import hashlib
@@ -12,20 +12,34 @@ from pathlib import Path
 from build_config import task_config
 
 ROOT = Path(__file__).resolve().parent
-WORKLOADS = {0: "opposite_shared_pc", 1: "structured", 2: "pseudorandom", 3: "opposite_separate_pc"}
+WORKLOADS = {0: "opposite_shared_pc", 1: "structured", 2: "pseudorandom", 3: "opposite_separate_pc", 4: "embench"}
+EMBENCH = 4             # preemptive workload: one Embench-IoT kernel per task
+EMBENCH_KERNELS = 3     # sw/preempt.c; each task needs a different kernel
+PREDICTORS = {"twobit": 8, "gshare": 9}  # BranchPredictorType.vh codes
+PREDICTOR_NAMES = {code: name for name, code in PREDICTORS.items()}
+# What the task-aware mode (mode 1) changes, relative to mode 0, for each predictor.
+TASK_MODE = {
+    "twobit": "Bimodal two-bit predictor. Task-aware mode gives each context its own bank of counters.",
+    "gshare": "gshare. Task-aware mode gives each context its own global history; all contexts share the counters.",
+}
 
 
 def arguments():
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("--tasks", type=int, default=2, help="task count used to build hardware and software (1-256)")
+    p.add_argument("--tasks", type=int, default=2, help="task count used to build hardware and software (1-255)")
+    p.add_argument("--predictor", choices=PREDICTORS, default="twobit", help="direction predictor the simulator was built with")
     p.add_argument("--binary", type=Path)
     p.add_argument("--mem", type=Path)
     p.add_argument("--symbols", type=Path)
     p.add_argument("--output", type=Path)
-    p.add_argument("--quanta", type=int, nargs="+", default=[1, 4, 16, 64, 256])
-    p.add_argument("--workloads", type=int, nargs="+", choices=WORKLOADS, default=list(WORKLOADS))
+    p.add_argument("--quanta", type=int, nargs="+", default=[1, 16, 256])
+    # Default: the shared-branch workload, its separate-branch control, and Embench.
+    p.add_argument("--workloads", type=int, nargs="+", choices=WORKLOADS, default=[0, 3, EMBENCH])
     p.add_argument("--iterations", type=int, default=2048)
-    p.add_argument("--timeout", type=int, default=120)
+    p.add_argument("--embench-quanta", type=int, nargs="+", default=[500, 8000, 128000],
+                   help="task cycles per timer tick for the preemptive Embench workload")
+    p.add_argument("--embench-reps", type=int, default=128, help="kernel repetitions per Embench task")
+    p.add_argument("--timeout", type=int, default=900)
     p.add_argument("--repeat", type=int, default=1)
     p.add_argument("--window", type=int, default=32, help="hot branches measured after each task-ID change")
     p.add_argument("--maxcycles", type=int, help="simulation watchdog (default scales with task count and work)")
@@ -35,25 +49,35 @@ def arguments():
         args.config = task_config(args.tasks)
     except ValueError as error:
         p.error(str(error))
-    build = ROOT / "build" / f"tasks-{args.tasks}"
+    build = ROOT / "build" / f"{args.predictor}-tasks-{args.tasks}"
     software = ROOT / "sw/build" / f"tasks-{args.tasks}"
     args.binary = args.binary or build / "obj_dir/Vtask_bpred_tb"
     args.mem = args.mem or software / "workloads.mem"
     args.symbols = args.symbols or software / "workloads.nm"
-    args.output = args.output or (ROOT / "results" if args.tasks == 2 else build / "results")
+    args.output = args.output or build / "results"
     if args.maxcycles is None:
-        args.maxcycles = max(10000000, args.tasks * (512 * args.iterations + 32768))
-    if min(args.quanta + [args.iterations, args.timeout, args.repeat, args.window, args.maxcycles]) < 1:
-        p.error("quanta, iterations, timeout, repeat, window, and maxcycles must be positive")
+        args.maxcycles = max(10000000, args.tasks * (512 * args.iterations + 32768),
+                             args.tasks * args.embench_reps * 100000 if EMBENCH in args.workloads else 0)
+    if min(args.quanta + args.embench_quanta + [args.iterations, args.embench_reps, args.timeout,
+                                                args.repeat, args.window, args.maxcycles]) < 1:
+        p.error("quanta, iterations, repetitions, timeout, repeat, window, and maxcycles must be positive")
+    if EMBENCH in args.workloads and args.tasks > EMBENCH_KERNELS:
+        p.error(f"the Embench workload supports at most {EMBENCH_KERNELS} tasks; omit workload {EMBENCH}")
     return args
 
 
 def run_case(args, workload, quantum, mode, repeat):
+    # For the preemptive Embench workload, quantum is task cycles per timer
+    # tick and iterations is kernel repetitions per task.
+    preemptive = workload == EMBENCH
+    iterations = args.embench_reps if preemptive else args.iterations
     # Record commands relative to the experiment so published results are portable.
     cmd = ["./" + os.path.relpath(args.binary.resolve(), ROOT),
            f"+mem={os.path.relpath(args.mem.resolve(), ROOT)}",
-           f"+mode={mode}", f"+quantum={quantum}", f"+workload={workload}",
-           f"+iterations={args.iterations}", f"+window={args.window}", f"+maxcycles={args.maxcycles}"]
+           f"+mode={mode}", f"+quantum={1 if preemptive else quantum}", f"+workload={workload}",
+           f"+iterations={iterations}", f"+window={args.window}", f"+maxcycles={args.maxcycles}"]
+    if preemptive:
+        cmd.append(f"+preempt={quantum}")
     symbols = {}
     for line in args.symbols.read_text().splitlines():
         fields = line.split()
@@ -74,35 +98,45 @@ def run_case(args, workload, quantum, mode, repeat):
     row = json.loads(records[0])
     if row.get("status") not in (1, "pass", "PASS"):
         raise RuntimeError(f"{stem}: software self-check failed: {row}")
-    for key in ("tasks", "banks", "entries_per_task", "ram_bytes"):
-        if row.get(key) != args.config[key]:
-            raise RuntimeError(f"{stem}: hardware {key}={row.get(key)}, expected {args.config[key]}; rebuild with TASKS={args.tasks}")
+    expected = {**args.config, "predictor_type": PREDICTORS[args.predictor]}
+    for key in ("tasks", "contexts", "banks", "entries_per_task", "ram_bytes", "predictor_type"):
+        if row.get(key) != expected[key]:
+            raise RuntimeError(f"{stem}: hardware {key}={row.get(key)}, expected {expected[key]}; "
+                               f"rebuild with TASKS={args.tasks} PREDICTOR={args.predictor}")
     if row.get("software_task_count") != args.tasks:
         raise RuntimeError(f"{stem}: firmware task count does not match --tasks {args.tasks}")
-    dispatches = args.tasks * ((args.iterations + quantum - 1) // quantum)
-    if row.get("software_switches") != dispatches:
-        raise RuntimeError(f"{stem}: expected {dispatches} task dispatches, got {row.get('software_switches')}")
-    expected_switches = dispatches - 1 if args.tasks > 1 else 0
-    if row.get("switches") != expected_switches:
-        raise RuntimeError(f"{stem}: expected {expected_switches} task-ID changes, got {row.get('switches')}")
-    if row.get("hot_branches") != args.tasks * args.iterations:
-        raise RuntimeError(f"{stem}: expected {args.tasks * args.iterations} controlled branches, got {row.get('hot_branches')}")
+    if preemptive:
+        # Timer ticks depend on timing; every task must still have been dispatched.
+        if row.get("software_switches", 0) < args.tasks:
+            raise RuntimeError(f"{stem}: only {row.get('software_switches')} task dispatches")
+    else:
+        dispatches = args.tasks * ((iterations + quantum - 1) // quantum)
+        if row.get("software_switches") != dispatches:
+            raise RuntimeError(f"{stem}: expected {dispatches} task dispatches, got {row.get('software_switches')}")
+        expected_switches = dispatches - 1 if args.tasks > 1 else 0
+        if row.get("switches") != expected_switches:
+            raise RuntimeError(f"{stem}: expected {expected_switches} task-ID changes, got {row.get('switches')}")
+        if row.get("hot_branches") != args.tasks * iterations:
+            raise RuntimeError(f"{stem}: expected {args.tasks * iterations} controlled branches, got {row.get('hot_branches')}")
     if len(row["per_task"]) != args.tasks or {t["task"] for t in row["per_task"]} != set(range(args.tasks)):
         raise RuntimeError(f"{stem}: incorrect task IDs in per-task results")
     for prefix in ("", "hot_", "post_switch_"):
         if not 0 <= row[prefix + "mispredictions"] <= row[prefix + "branches"]:
             raise RuntimeError(f"{stem}: inconsistent {prefix} counters")
-        if sum(t[prefix + "branches"] for t in row["per_task"]) != row[prefix + "branches"]:
+        # Scheduler branches belong to no task; it executes no hot branches.
+        kernel = row["kernel_branches"] if prefix == "" else 0
+        kernel_misses = row["kernel_mispredictions"] if prefix == "" else 0
+        if sum(t[prefix + "branches"] for t in row["per_task"]) + kernel != row[prefix + "branches"]:
             raise RuntimeError(f"{stem}: inconsistent per-task {prefix} branch totals")
-        if sum(t[prefix + "mispredictions"] for t in row["per_task"]) != row[prefix + "mispredictions"]:
+        if sum(t[prefix + "mispredictions"] for t in row["per_task"]) + kernel_misses != row[prefix + "mispredictions"]:
             raise RuntimeError(f"{stem}: inconsistent per-task {prefix} miss totals")
     for task in row.get("per_task", []):
-        if task["hot_branches"] != args.iterations or task["completed"] != args.iterations:
+        if task["completed"] != iterations or (not preemptive and task["hot_branches"] != iterations):
             raise RuntimeError(f"{stem}: incorrect per-task branch attribution: {task}")
         if task["checksum"] != task["expected"]:
             raise RuntimeError(f"{stem}: incorrect per-task checksum: {task}")
     row.update(workload=workload, workload_name=WORKLOADS[workload], quantum=quantum,
-               mode=mode, iterations=args.iterations, repeat=repeat, window=args.window, command=cmd)
+               mode=mode, iterations=iterations, repeat=repeat, window=args.window, command=cmd)
     return row
 
 
@@ -112,18 +146,19 @@ def accuracy(row, prefix=""):
 
 
 def validate_pair(shared, partitioned):
-    # Prediction can change timing, never architectural results or retired work.
-    for key in ("checksum", "instructions", "branches", "hot_branches", "switches", "tasks", "banks", "entries_per_task", "predictor_entries", "btb_entries", "ras_entries"):
+    # Prediction can change timing, never architectural results or task work.
+    # Under preemption, timing changes the number of ticks, so scheduler work and
+    # totals may differ; each task's own execution must not.
+    keys = ["checksum", "hot_branches", "tasks", "banks", "entries_per_task", "predictor_entries", "btb_entries", "ras_entries"]
+    if shared["workload"] != EMBENCH:
+        keys += ["instructions", "branches", "switches"]
+    for key in keys:
         if key in shared and shared[key] != partitioned[key]:
             raise RuntimeError(f"Unequal {key} in matched pair: {shared[key]} != {partitioned[key]}")
     for task_a, task_b in zip(shared["per_task"], partitioned["per_task"]):
         for key in ("task", "checksum", "expected", "completed", "branches", "hot_branches"):
             if task_a[key] != task_b[key]:
                 raise RuntimeError(f"Unequal per-task {key} in matched pair: {task_a} != {task_b}")
-    if shared["tasks"] == 1:
-        for key in ("cycles", "mispredictions", "hot_mispredictions"):
-            if shared[key] != partitioned[key]:
-                raise RuntimeError(f"Single-task modes should be identical: unequal {key}")
 
 
 def plot(rows, output):
@@ -137,7 +172,7 @@ def plot(rows, output):
         entries = rows[0]["predictor_entries"]
         banks = rows[0]["banks"]
         per_task = rows[0]["entries_per_task"]
-        for mode, label in [(0, f"Shared: {entries} counters"), (1, f"Partitioned: {banks} x {per_task} counters")]:
+        for mode, label in [(0, f"Shared: {entries} counters"), (1, "Task-aware")]:
             subset = sorted((r for r in rows if r["workload"] == workload and r["mode"] == mode and r["repeat"] == 0), key=lambda r: r["quantum"])
             x = [r["quantum"] for r in subset]
             axrow[0].plot(x, [accuracy(r, "hot_") for r in subset], marker="o", label=label)
@@ -162,17 +197,18 @@ def report(rows, output):
     entries = hardware["predictor_entries"]
     lines = ["# Task-aware branch prediction: measured results", "",
              f"{len(rows)} successful full-core RTL runs. Every paired run passed software self-checks and matched checksums, retired instructions, conditional-branch counts, hot-branch counts, and task-ID changes.", "",
-             f"Tasks: {hardware['tasks']}. Direction table: {entries} two-bit counters in either mode; partitioned mode reserves {hardware['banks']} banks of {hardware['entries_per_task']} counters, with {hardware['banks'] - hardware['tasks']} unused banks. BTB: {hardware['btb_entries']:,} entries, shared and identical in both modes. RAS: {hardware['ras_entries']} entries, shared and identical.", "",
-             "| Workload | Quantum | Shared hot accuracy | Partitioned hot accuracy | Shared cycles | Partitioned cycles | Cycle reduction |",
-             "|---|---:|---:|---:|---:|---:|---:|"]
+             f"{TASK_MODE[PREDICTOR_NAMES[hardware['predictor_type']]]} Mode 0 is the same predictor with one shared history and table.", "",
+             f"Tasks: {hardware['tasks']}, plus the scheduler in its own predictor context ({hardware['contexts']} contexts). Direction table: {entries} two-bit counters in either mode; banked modes use {hardware['banks']} banks of {hardware['entries_per_task']} counters, with {hardware['banks'] - hardware['contexts']} unused banks. BTB: {hardware['btb_entries']:,} entries, shared and identical in both modes. RAS: {hardware['ras_entries']} entries, shared and identical.", "",
+             "| Workload | Quantum | Shared hot accuracy | Task-aware hot accuracy | Shared scheduler misses | Task-aware scheduler misses | Shared cycles | Task-aware cycles | Cycle reduction |",
+             "|---|---:|---:|---:|---:|---:|---:|---:|---:|"]
     for shared, partitioned in zip(rows[::2], rows[1::2]):
         if shared["repeat"] != 0:
             continue
         reduction = 100 * (shared["cycles"] - partitioned["cycles"]) / shared["cycles"]
-        lines.append(f"| {shared['workload_name']} | {shared['quantum']} | {accuracy(shared, 'hot_'):.2f}% | {accuracy(partitioned, 'hot_'):.2f}% | {shared['cycles']} | {partitioned['cycles']} | {reduction:+.2f}% |")
-    lines += ["", "Quantum is workload iterations per task slice. Cycle counts include scheduler overhead. Hot accuracy counts only the explicitly labeled conditional branch in each workload iteration. Negative cycle reduction means partitioning was slower.", "",
-              "The shared-PC workload intentionally runs opposing task-dependent outcomes through the same code. It demonstrates a mechanism, not a representative benchmark average. Structured and pseudorandom cases and the separate-PC control expose limitations. These measurements do not establish effects for desktop process switches, preemptive scheduling, global-history predictors, or FPGA timing.", "",
-              "`results.json` contains per-task, post-switch, direction-miss, target-miss, and actual control-redirection counters. The post-switch window covers the first configured number of hot branches following each task-ID change. Initial startup is excluded from that window; predictor training during startup is retained.", "",
+        lines.append(f"| {shared['workload_name']} | {shared['quantum']} | {accuracy(shared, 'hot_'):.2f}% | {accuracy(partitioned, 'hot_'):.2f}% | "
+                     f"{shared['kernel_mispredictions']} | {partitioned['kernel_mispredictions']} | {shared['cycles']} | {partitioned['cycles']} | {reduction:+.2f}% |")
+    lines += ["", "Quantum is workload iterations per task slice, except for `embench`, where it is task cycles per timer tick. Cycle counts include scheduler overhead. Hot accuracy counts only the explicitly labeled conditional branch in each workload iteration; for `embench` it counts every task branch. Scheduler misses are direction mispredictions in the scheduler's own context. Negative cycle reduction means task-aware mode was slower.", "",
+              "The shared-PC workload intentionally runs opposing task-dependent outcomes through the same code; the separate-PC workload is its control. Embench runs real kernels under timer preemption.", "",
               f"See [{os.path.relpath(ROOT / 'README.md', output)}]({os.path.relpath(ROOT / 'README.md', output)}) for implementation, commands, and measurement definitions."]
     (output / "report.md").write_text("\n".join(lines) + "\n")
 
@@ -183,8 +219,9 @@ def main():
     args.output.mkdir(parents=True, exist_ok=True)
     for path in (args.binary, args.mem, args.symbols):
         if not path.is_file():
-            sys.exit(f"Missing {path}; run make TASKS={args.tasks} in {ROOT} first")
-    metadata = {**args.config, "iterations": args.iterations, "quanta": args.quanta,
+            sys.exit(f"Missing {path}; run make TASKS={args.tasks} PREDICTOR={args.predictor} in {ROOT} first")
+    metadata = {**args.config, "predictor": args.predictor, "iterations": args.iterations, "quanta": args.quanta,
+                "embench_quanta": args.embench_quanta, "embench_reps": args.embench_reps,
                 "workloads": args.workloads, "repeat": args.repeat, "window": args.window,
                 "maxcycles": args.maxcycles,
                 "sha256": {os.path.relpath(p.resolve(), ROOT): hashlib.sha256(p.read_bytes()).hexdigest()
@@ -194,7 +231,7 @@ def main():
     rows = []
     for repeat in range(args.repeat):
         for workload in args.workloads:
-            for quantum in args.quanta:
+            for quantum in (args.embench_quanta if workload == EMBENCH else args.quanta):
                 pair = [run_case(args, workload, quantum, mode, repeat) for mode in (0, 1)]
                 validate_pair(*pair)
                 if repeat:
